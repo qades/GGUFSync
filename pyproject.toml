@@ -1,0 +1,166 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# UV-specific configuration
+[tool.uv]
+# Allow installation via `uvx link-models`
+# This ensures the package is compatible with uv's tool ecosystem
+
+[project]
+name = "link-models"
+# UV-specific: Enable tool installation via `uvx link-models`
+# Usage: uvx link-models [command]
+# Or: uv tool install link-models
+version = "2.0.0"
+description = "Cross-platform model linker for LLM inference engines"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "LocalAI Contributors" },
+]
+keywords = ["llm", "gguf", "localai", "llama-cpp", "lmstudio", "models"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Filesystems",
+    "Topic :: Utilities",
+]
+
+dependencies = [
+    "gguf>=0.13.0",
+    "watchdog>=4.0.0",
+    "pydantic>=2.0.0",
+    "pydantic-yaml>=1.0.0",
+    "typer>=0.12.0",
+    "rich>=13.0.0",
+    "structlog>=24.0.0",
+    "anyio>=4.0.0",
+    "platformdirs>=4.0.0",
+    "pyyaml>=6.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0.0",
+    "pytest-mock>=3.14.0",
+    "pytest-xdist>=3.5.0",
+    "hypothesis>=6.100.0",
+    "mypy>=1.10.0",
+    "ruff>=0.4.0",
+    "pre-commit>=3.7.0",
+    "respx>=0.21.0",
+    "freezegun>=1.5.0",
+]
+build = [
+    "pyinstaller>=6.0.0",
+    "nuitka>=2.0.0",
+    "zstandard>=0.22.0",
+]
+
+[project.scripts]
+link-models = "link_models.main:app"
+
+[project.urls]
+Homepage = "https://github.com/mudler/LocalAI"
+Documentation = "https://localai.io"
+Repository = "https://github.com/mudler/LocalAI"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/link_models"]
+
+# Ruff configuration
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # Pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "W",   # pycodestyle warnings
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+    "RUF", # Ruff-specific rules
+]
+ignore = ["E501"]  # Line too long (handled by formatter)
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+# MyPy configuration
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+show_error_codes = true
+explicit_package_bases = true
+mypy_path = ["src"]
+
+# Pytest configuration
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+pythonpath = ["src"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+    "-ra",
+]
+markers = [
+    "unit: Unit tests (fast, isolated)",
+    "integration: Integration tests (slower, may touch filesystem)",
+    "slow: Slow tests",
+    "requires_gguf: Tests requiring actual GGUF files",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["src/link_models"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+show_missing = true
+fail_under = 80
+
+[tool.coverage.html]
+directory = "htmlcov"
