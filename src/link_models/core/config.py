@@ -19,6 +19,8 @@ from .constants import (
     DEFAULT_GPT4ALL_DIR,
     DEFAULT_KOBOLDCPP_DIR,
     DEFAULT_VLLM_DIR,
+    DEFAULT_JAN_DIR,
+    DEFAULT_LLAMA_CPP_PYTHON_DIR,
 )
 from .exceptions import ConfigError
 from .logging import get_logger
@@ -33,6 +35,8 @@ from .models import (
     GPT4AllConfig,
     KoboldCppConfig,
     vLLMConfig,
+    JanConfig,
+    LlamaCppPythonConfig,
     WatchConfig,
     LoggingConfig,
     SyncConfig,
@@ -306,6 +310,10 @@ class ConfigLoader:
                 backends[name] = KoboldCppConfig(**config)
             elif backend_type == "vllm":
                 backends[name] = vLLMConfig(**config)
+            elif backend_type == "jan":
+                backends[name] = JanConfig(**config)
+            elif backend_type in ("llama_cpp_python", "llama-cpp-python", "llamacpp-python"):
+                backends[name] = LlamaCppPythonConfig(**config)
             else:
                 backends[name] = BackendConfig(**config)
 
@@ -393,6 +401,19 @@ class ConfigLoader:
                     "output_dir": DEFAULT_VLLM_DIR,
                     "generate_config": True,
                     "trust_remote_code": True,
+                },
+                "jan": {
+                    "enabled": False,
+                    "output_dir": DEFAULT_JAN_DIR,
+                    "generate_metadata": True,
+                },
+                "llama_cpp_python": {
+                    "enabled": False,
+                    "output_dir": DEFAULT_LLAMA_CPP_PYTHON_DIR,
+                    "server_port": 8000,
+                    "server_host": "0.0.0.0",
+                    "context_size": 4096,
+                    "gpu_layers": -1,
                 },
             },
             "watch": {

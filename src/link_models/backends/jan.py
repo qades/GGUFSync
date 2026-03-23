@@ -1,58 +1,67 @@
-"""vLLM backend implementation."""
+"""Jan backend implementation."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from .base import Backend, BackendResult, SyncAction
 from ..core.logging import get_logger
-from ..core.models import vLLMConfig, ModelGroup, GGUFMetadata
+from ..core.models import ModelGroup, GGUFMetadata
 
 logger = get_logger(__name__)
 
 
-class vLLMBackend(Backend):
-    """Backend for vLLM model organization.
+class JanConfig:
+    """Configuration for Jan backend."""
 
-    vLLM uses HuggingFace-style directory structure with config.yaml.
-    This backend creates symlinks and generates config files.
+    def __init__(
+        self,
+        output_dir: Path,
+        enabled: bool = True,
+        generate_metadata: bool = True,
+    ) -> None:
+        self.output_dir = output_dir
+        self.enabled = enabled
+        self.generate_metadata = generate_metadata
+
+
+class JanBackend(Backend):
+    """Backend for Jan model organization.
+
+    Jan (jan.ai) uses a flat directory structure with model metadata.
+    Models are stored in the models/ subdirectory with config.json files.
     """
 
-    def __init__(self, config: vLLMConfig) -> None:
-        """Initialize vLLM backend.
+    def __init__(self, config: JanConfig) -> None:
+        """Initialize Jan backend.
 
         Args:
-            config: vLLM configuration
+            config: Jan configuration
         """
         super().__init__(config)
-        self.vllm_config = config
+        self.jan_config = config
 
     @property
     def name(self) -> str:
         """Return backend name."""
-        return "vLLM"
+        return "Jan"
 
     def setup(self) -> None:
-        """Setup vLLM backend directories."""
+        """Setup Jan backend directories."""
         super().setup()
 
         if not self.config.enabled:
             return
 
-        self.models_dir = self.output_dir
+        self.models_dir = self.output_dir / "models"
         self._ensure_dir(self.models_dir)
 
-        if self.vllm_config.generate_config:
-            self.configs_dir = self.models_dir / ".configs"
-            self._ensure_dir(self.configs_dir)
-
     def sync_group(self, group: ModelGroup, source_dir: Path) -> BackendResult:
-        """Sync a model group to vLLM backend.
+        """Sync a model group to Jan backend.
 
-        Creates symlinks in the models directory.
+        Jan stores models flat with metadata in config.json.
 
         Args:
             group: Model group to sync
@@ -67,9 +76,9 @@ class vLLMBackend(Backend):
         result = BackendResult(success=True)
         model_id = group.model_id
 
-        # vLLM uses HuggingFace-style directory structure
-        model_subdir = self.models_dir / model_id
-        self._ensure_dir(model_subdir)
+        # Jan uses flat directory structure
+        model_dir = self.models_dir / model_id
+        self._ensure_dir(model_dir)
 
         # Link all model files
         for model_file in group.files:
@@ -82,7 +91,7 @@ class vLLMBackend(Backend):
                 result.skipped += 1
                 continue
 
-            target = model_subdir / model_file.name
+            target = model_dir / model_file.name
             link_result = self._create_link(
                 model_file.path,
                 target,
@@ -101,7 +110,7 @@ class vLLMBackend(Backend):
 
         # Link mmproj if present
         if group.mmproj_file:
-            mmproj_target = model_subdir / group.mmproj_file.name
+            mmproj_target = model_dir / group.mmproj_file.name
             link_result = self._create_link(
                 group.mmproj_file.path,
                 mmproj_target,
@@ -112,14 +121,14 @@ class vLLMBackend(Backend):
                 if link_result.action == SyncAction.CREATE:
                     result.linked += 1
 
-        # Generate config if enabled
-        if self.vllm_config.generate_config:
-            self._generate_config(group, model_subdir)
+        # Generate metadata file if enabled
+        if self.jan_config.generate_metadata:
+            self._generate_metadata(group, model_dir)
 
         return result
 
     def remove_group(self, model_id: str) -> BackendResult:
-        """Remove a model group from vLLM backend.
+        """Remove a model group from Jan backend.
 
         Args:
             model_id: Normalized model ID to remove
@@ -130,28 +139,21 @@ class vLLMBackend(Backend):
         result = BackendResult(success=True)
 
         # Remove model directory
-        model_subdir = self.models_dir / model_id
-        if model_subdir.exists():
-            if self._remove_path(model_subdir):
+        model_dir = self.models_dir / model_id
+        if model_dir.exists():
+            if self._remove_path(model_dir):
                 result.removed += 1
             else:
-                result.errors.append(f"Failed to remove {model_subdir}")
-
-        # Remove config file if exists
-        if hasattr(self, "configs_dir") and self.configs_dir:
-            config_file = self.configs_dir / f"{model_id}.yaml"
-            if config_file.exists():
-                if self._remove_path(config_file):
-                    result.removed += 1
+                result.errors.append(f"Failed to remove {model_dir}")
 
         return result
 
-    def _generate_config(self, group: ModelGroup, model_subdir: Path) -> None:
-        """Generate vLLM config.yaml for a model group.
+    def _generate_metadata(self, group: ModelGroup, model_dir: Path) -> None:
+        """Generate Jan metadata file.
 
         Args:
             group: Model group
-            model_subdir: Directory to write config to
+            model_dir: Directory to write metadata to
         """
         model_id = group.model_id
         primary = group.primary_file
@@ -162,36 +164,28 @@ class vLLMBackend(Backend):
 
         metadata = primary.metadata or GGUFMetadata()
 
-        # Build config (vLLM uses HuggingFace-style config.json)
+        # Build Jan config (model.json format)
         config = {
-            "model_type": metadata.architecture or "llama",
-            "torch_dtype": "float16",
-            "trust_remote_code": self.vllm_config.trust_remote_code,
+            "id": model_id,
+            "object": "model",
+            "created": 0,  # Will be set by Jan
+            "owned_by": "user",
+            "filename": primary.name,
+            "size": primary.file_size if hasattr(primary, "file_size") else 0,
+            "metadata": {
+                "arch": metadata.architecture,
+                "quantization": metadata.quantization,
+                "context_length": metadata.context_length,
+            },
         }
 
-        # Add context length if known
-        if metadata.context_length:
-            config["max_model_len"] = metadata.context_length
-
-        # Add quantization if known
-        if metadata.quantization:
-            config["quantization"] = f"gguf_{metadata.quantization}"
-
-        # For vision models
-        if group.has_vision and group.mmproj_file:
-            config["mm_processor_kwargs"] = {
-                "mm_model": f"./{group.mmproj_file.name}",
-            }
-
-        config_path = model_subdir / "config.json"
-
-        import json
+        config_path = model_dir / "model.json"
 
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)
 
         self._set_permissions(config_path)
-        logger.debug("Generated vLLM config.json", path=str(config_path))
+        logger.debug("Generated Jan metadata", path=str(config_path))
 
     def cleanup_orphans(self, valid_model_ids: set[str]) -> BackendResult:
         """Remove orphaned model directories not in valid set.
@@ -209,10 +203,10 @@ class vLLMBackend(Backend):
 
         # Cleanup model directories
         for item in self.models_dir.iterdir():
-            if item.name in (".configs",):
+            if not item.is_dir():
                 continue
 
-            if item.is_dir() and item.name not in valid_model_ids:
+            if item.name not in valid_model_ids:
                 if self._remove_path(item):
                     result.removed += 1
                 else:

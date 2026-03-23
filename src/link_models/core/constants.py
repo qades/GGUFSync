@@ -12,6 +12,8 @@ DEFAULT_TEXTGEN_DIR = "/textgen_models"
 DEFAULT_GPT4ALL_DIR = "/gpt4all_models"
 DEFAULT_KOBOLDCPP_DIR = "/koboldcpp_models"
 DEFAULT_VLLM_DIR = "/vllm_models"
+DEFAULT_JAN_DIR = "/jan_models"
+DEFAULT_LLAMA_CPP_PYTHON_DIR = "/llama-cpp-python_models"
 
 # Service configuration
 DEFAULT_SERVICE_NAME = "link-models"

@@ -454,6 +454,31 @@ class vLLMConfig(BackendConfig):
     enforce_eager: bool = False
 
 
+class JanConfig(BackendConfig):
+    """Configuration for Jan backend.
+
+    Jan (jan.ai) uses a flat directory structure with model metadata.
+    Models are stored in the models/ subdirectory with config.json files.
+    """
+
+    generate_metadata: bool = True
+
+
+class LlamaCppPythonConfig(BackendConfig):
+    """Configuration for llama-cpp-python backend.
+
+    llama-cpp-python is a Python binding for llama.cpp.
+    It runs as an API server without native model file management.
+    This backend creates symlinks to model files for the server to access.
+    """
+
+    server_port: int = 8000
+    server_host: str = "0.0.0.0"
+    server_threads: int = 4
+    context_size: int = 4096
+    gpu_layers: int = -1
+
+
 class IgnoreConfig(BaseModel):
     """Configuration for per-backend model filtering."""
 
