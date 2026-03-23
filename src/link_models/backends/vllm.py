@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import Any
-
-import yaml
 
 from .base import Backend, BackendResult, SyncAction
 from ..core.logging import get_logger
