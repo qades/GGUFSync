@@ -47,7 +47,12 @@ class vLLMBackend(Backend):
             self.configs_dir = self.models_dir / ".configs"
             self._ensure_dir(self.configs_dir)
 
-    def sync_group(self, group: ModelGroup, source_dir: Path) -> BackendResult:
+    def sync_group(
+        self,
+        group: ModelGroup,
+        source_dir: Path,
+        context_size: int | None = None,
+    ) -> BackendResult:
         """Sync a model group to vLLM backend.
 
         Creates symlinks in the models directory.
@@ -55,6 +60,7 @@ class vLLMBackend(Backend):
         Args:
             group: Model group to sync
             source_dir: Source directory (ground truth)
+            context_size: Optional context size override
 
         Returns:
             BackendResult with operation results

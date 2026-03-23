@@ -222,8 +222,8 @@ class TestKoboldCppBackend:
         config = KoboldCppConfig(
             output_dir=temp_dir / "koboldcpp_models",
             generate_kcpps=True,
-            default_context_size=4096,
-            default_gpu_layers=32,
+            context_size=4096,
+            gpu_layers=32,
         )
         return KoboldCppBackend(config)
 

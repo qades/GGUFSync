@@ -49,7 +49,12 @@ class GPT4AllBackend(Backend):
             self.configs_dir = self.models_dir / ".configs"
             self._ensure_dir(self.configs_dir)
 
-    def sync_group(self, group: ModelGroup, source_dir: Path) -> BackendResult:
+    def sync_group(
+        self,
+        group: ModelGroup,
+        source_dir: Path,
+        context_size: int | None = None,
+    ) -> BackendResult:
         """Sync a model group to GPT4All backend.
 
         Creates symlinks in the models directory.
@@ -57,6 +62,7 @@ class GPT4AllBackend(Backend):
         Args:
             group: Model group to sync
             source_dir: Source directory (ground truth)
+            context_size: Optional context size override
 
         Returns:
             BackendResult with operation results
@@ -114,7 +120,7 @@ class GPT4AllBackend(Backend):
 
         # Generate config if enabled
         if self.gpt4all_config.generate_config:
-            self._generate_config(group)
+            self._generate_config(group, context_size)
 
         return result
 
@@ -146,11 +152,12 @@ class GPT4AllBackend(Backend):
 
         return result
 
-    def _generate_config(self, group: ModelGroup) -> None:
-        """Generate JSON config for GPT4All.
+    def _generate_config(self, group: ModelGroup, context_size: int | None = None) -> None:
+        """Generate GPT4All config file.
 
         Args:
             group: Model group
+            context_size: Optional context size override
         """
         model_id = group.model_id
         primary = group.primary_file
@@ -161,12 +168,17 @@ class GPT4AllBackend(Backend):
 
         metadata = primary.metadata or GGUFMetadata()
 
+        # Get context size: param > config > metadata > -1 (unlimited)
+        effective_context_size = (
+            context_size or self.config.context_size or metadata.context_length or -1
+        )
+
         # Build config - GPT4All uses a specific JSON format
         config = {
             "model": f"{model_id}/{primary.name}",
             "model_name": group.display_name,
             "model_path": str(primary.path),
-            "context_length": metadata.context_length or self.gpt4all_config.default_context_size,
+            "context_length": effective_context_size,
             "parameters": {
                 "temperature": 0.7,
                 "top_p": 0.9,
@@ -176,7 +188,7 @@ class GPT4AllBackend(Backend):
                 "presence_penalty": 0.0,
             },
             "llm": {
-                "gpu_layers": self.gpt4all_config.default_gpu_layers,
+                "gpu_layers": self.config.gpu_layers,
             },
         }
 

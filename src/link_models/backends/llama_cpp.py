@@ -42,13 +42,14 @@ class LlamaCppBackend(Backend):
         self.models_dir = self.output_dir
         self._ensure_dir(self.models_dir)
     
-    def sync_group(self, group: ModelGroup, source_dir: Path) -> BackendResult:
+    def sync_group(self, group: ModelGroup, source_dir: Path, context_size: int | None = None) -> BackendResult:
         """Sync a model group to llama.cpp backend.
         
         Creates hardlinks in a subdirectory per model.
         
         Args:
             group: Model group to sync
+            context_size: Optional context size override
             source_dir: Source directory (ground truth)
             
         Returns:

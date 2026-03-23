@@ -36,7 +36,7 @@ class JanBackend(Backend):
         self.models_dir = self.output_dir / "models"
         self._ensure_dir(self.models_dir)
 
-    def sync_group(self, group: ModelGroup, source_dir: Path) -> BackendResult:
+    def sync_group(self, group: ModelGroup, source_dir: Path, context_size: int | None = None) -> BackendResult:
         if not self.config.enabled:
             return BackendResult(success=True, skipped=1)
 

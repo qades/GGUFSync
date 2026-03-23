@@ -44,7 +44,24 @@ class KoboldCppBackend(Backend):
         self.models_dir = self.output_dir
         self._ensure_dir(self.models_dir)
 
-    def sync_group(self, group: ModelGroup, source_dir: Path) -> BackendResult:
+    def sync_group(
+        self,
+        group: ModelGroup,
+        source_dir: Path,
+        context_size: int | None = None,
+    ) -> BackendResult:
+        """Sync a model group to KoboldCpp backend.
+
+        Creates symlinks and .kcpps config files.
+
+        Args:
+            group: Model group to sync
+            source_dir: Source directory (ground truth)
+            context_size: Optional context size override
+
+        Returns:
+            BackendResult with operation results
+        """
         """Sync a model group to KoboldCpp backend.
 
         Creates symlinks and generates .kcpps sidecar files.
@@ -109,7 +126,7 @@ class KoboldCppBackend(Backend):
 
         # Generate .kcpps file if enabled
         if self.koboldcpp_config.generate_kcpps:
-            self._generate_kcpps(group)
+            self._generate_kcpps(group, context_size)
 
         return result
 
@@ -134,11 +151,12 @@ class KoboldCppBackend(Backend):
 
         return result
 
-    def _generate_kcpps(self, group: ModelGroup) -> None:
+    def _generate_kcpps(self, group: ModelGroup, context_size: int | None = None) -> None:
         """Generate .kcpps sidecar config for KoboldCpp.
 
         Args:
             group: Model group
+            context_size: Optional context size override
         """
         model_id = group.model_id
         primary = group.primary_file
@@ -149,11 +167,16 @@ class KoboldCppBackend(Backend):
 
         metadata = primary.metadata or GGUFMetadata()
 
+        # Get context size: param > config > metadata > -1 (unlimited)
+        effective_context_size = (
+            context_size or self.config.context_size or metadata.context_length or -1
+        )
+
         # Build .kcpps config (KoboldCpp uses JSON-like format saved as .kcpps)
         config = {
             "model_param": f"./{primary.name}",
-            "contextsize": metadata.context_length or self.koboldcpp_config.default_context_size,
-            "gpulayers": self.koboldcpp_config.default_gpu_layers,
+            "contextsize": effective_context_size,
+            "gpulayers": self.config.gpu_layers,
             "threads": self.koboldcpp_config.default_threads,
             "use_mmap": True,
             "use_flash_attention": True,

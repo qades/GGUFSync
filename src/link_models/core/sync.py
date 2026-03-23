@@ -134,6 +134,33 @@ class SyncEngine:
 
         return self._backend_filters[backend_name]
 
+    def _get_context_size(self, backend: Backend, metadata: GGUFMetadata | None) -> int | None:
+        """Get context size for a backend, respecting config overrides.
+
+        Priority: backend.config.context_size > sync.default_context_size > metadata
+
+        Args:
+            backend: Backend to get context size for
+            metadata: Model metadata (may contain context_length)
+
+        Returns:
+            Context size to use, or None to let backend decide
+        """
+        # Check backend-specific override first
+        if hasattr(backend.config, "context_size") and backend.config.context_size is not None:
+            return backend.config.context_size
+
+        # Check global default
+        if self.config.sync.default_context_size is not None:
+            return self.config.sync.default_context_size
+
+        # Fall back to metadata
+        if metadata and metadata.context_length:
+            return metadata.context_length
+
+        # None means "use backend default"
+        return None
+
     def _should_skip_backend(self, backend: Backend, model_id: str) -> bool:
         """Check if a model should be skipped for a specific backend.
 
@@ -474,7 +501,11 @@ class SyncEngine:
                 )
                 continue
 
-            group_result = backend.sync_group(group, self.source_dir)
+            # Get effective context size for this backend/model
+            metadata = group.primary_file.metadata if group.primary_file else None
+            context_size = self._get_context_size(backend, metadata)
+
+            group_result = backend.sync_group(group, self.source_dir, context_size)
             result.linked += group_result.linked
             result.updated += group_result.updated
             result.skipped += group_result.skipped
@@ -554,7 +585,9 @@ class SyncEngine:
                 for group in self._group_index.values():
                     if any(f.name == filename for f in group.files):
                         for backend in self.backends:
-                            result = backend.sync_group(group, self.source_dir)
+                            metadata = group.primary_file.metadata if group.primary_file else None
+                            context_size = self._get_context_size(backend, metadata)
+                            result = backend.sync_group(group, self.source_dir, context_size)
                             results[backend.name] = result
                         break
             else:
@@ -609,7 +642,9 @@ class SyncEngine:
             if any(f.name == path.name for f in group.files):
                 # Sync this group to all backends
                 for backend in self.backends:
-                    result = backend.sync_group(group, self.source_dir)
+                    metadata = group.primary_file.metadata if group.primary_file else None
+                    context_size = self._get_context_size(backend, metadata)
+                    result = backend.sync_group(group, self.source_dir, context_size)
                     results[backend.name] = result
                 break
 

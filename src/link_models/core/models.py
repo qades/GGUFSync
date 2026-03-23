@@ -355,6 +355,7 @@ class BackendConfig(BaseModel):
     extra_params: dict[str, Any] = Field(default_factory=dict)
     prefer_hardlinks: bool = True
     ignore_file: Path | None = Field(default=None)
+    context_size: int | None = None  # Override global default_context_size
 
     @field_validator("output_dir")
     @classmethod
@@ -426,8 +427,7 @@ class GPT4AllConfig(BackendConfig):
 
     generate_config: bool = False
     config_template: Path | None = None
-    default_context_size: int = 4096
-    default_gpu_layers: int = -1
+    gpu_layers: int = -1
 
 
 class KoboldCppConfig(BackendConfig):
@@ -437,8 +437,7 @@ class KoboldCppConfig(BackendConfig):
     """
 
     generate_kcpps: bool = True
-    default_context_size: int = 4096
-    default_gpu_layers: int = -1
+    gpu_layers: int = -1
     default_threads: int = 5
 
 
@@ -475,7 +474,6 @@ class LlamaCppPythonConfig(BackendConfig):
     server_port: int = 8000
     server_host: str = "0.0.0.0"
     server_threads: int = 4
-    context_size: int = 4096
     gpu_layers: int = -1
 
 
@@ -554,6 +552,7 @@ class SyncConfig(BaseModel):
     prefer_hardlinks: bool = True
     add_only: bool = False  # If True, never delete from backends, only add
     global_ignore_file: Path | None = Field(default=None)
+    default_context_size: int | None = None  # None = use model/frontend default
 
     @field_validator("global_ignore_file")
     @classmethod

@@ -50,7 +50,24 @@ class TextGenBackend(Backend):
             self.configs_dir = self.models_dir / "config.yaml.d"
             self._ensure_dir(self.configs_dir)
 
-    def sync_group(self, group: ModelGroup, source_dir: Path) -> BackendResult:
+    def sync_group(
+        self,
+        group: ModelGroup,
+        source_dir: Path,
+        context_size: int | None = None,
+    ) -> BackendResult:
+        """Sync a model group to TextGen backend.
+
+        Creates symlinks and generates model configs.
+
+        Args:
+            group: Model group to sync
+            source_dir: Source directory (ground truth)
+            context_size: Optional context size override
+
+        Returns:
+            BackendResult with operation results
+        """
         """Sync a model group to TextGen backend.
 
         Creates symlinks in the models directory.
@@ -115,7 +132,7 @@ class TextGenBackend(Backend):
 
         # Generate model config if enabled
         if self.textgen_config.generate_model_configs:
-            self._generate_model_config(group)
+            self._generate_model_config(group, context_size)
 
         return result
 
@@ -147,11 +164,12 @@ class TextGenBackend(Backend):
 
         return result
 
-    def _generate_model_config(self, group: ModelGroup) -> None:
+    def _generate_model_config(self, group: ModelGroup, context_size: int | None = None) -> None:
         """Generate per-model config for TextGen.
 
         Args:
             group: Model group
+            context_size: Optional context size override
         """
         model_id = group.model_id
         primary = group.primary_file
@@ -162,6 +180,11 @@ class TextGenBackend(Backend):
 
         metadata = primary.metadata or GGUFMetadata()
 
+        # Get context size: param > config > metadata > -1 (unlimited)
+        effective_context_size = (
+            context_size or self.config.context_size or metadata.context_length or -1
+        )
+
         # Build config
         config = {
             "model_name": group.display_name,
@@ -170,7 +193,7 @@ class TextGenBackend(Backend):
             "settings": {
                 "max_tokens": 512,
                 "temperature": 0.7,
-                "context_length": metadata.context_length or 4096,
+                "context_length": effective_context_size,
                 "gpu_layers": -1,
             },
         }

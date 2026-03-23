@@ -49,13 +49,14 @@ class OllamaBackend(Backend):
         self.manifests_dir = self.models_dir / "manifests"
         self._ensure_dir(self.manifests_dir)
 
-    def sync_group(self, group: ModelGroup, source_dir: Path) -> BackendResult:
+    def sync_group(self, group: ModelGroup, source_dir: Path, context_size: int | None = None) -> BackendResult:
         """Sync a model group to Ollama backend.
 
         Creates symlinks and generates manifest files if enabled.
 
         Args:
             group: Model group to sync
+            context_size: Optional context size override
             source_dir: Source directory (ground truth)
 
         Returns:

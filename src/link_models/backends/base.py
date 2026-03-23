@@ -62,12 +62,18 @@ class Backend(ABC):
         pass
 
     @abstractmethod
-    def sync_group(self, group: ModelGroup, source_dir: Path) -> BackendResult:
+    def sync_group(
+        self,
+        group: ModelGroup,
+        source_dir: Path,
+        context_size: int | None = None,
+    ) -> BackendResult:
         """Sync a model group to this backend.
 
         Args:
             group: Model group to sync
             source_dir: Source directory (ground truth)
+            context_size: Optional context size override
 
         Returns:
             BackendResult with operation results

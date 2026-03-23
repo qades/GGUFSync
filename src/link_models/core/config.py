@@ -386,15 +386,13 @@ class ConfigLoader:
                     "enabled": False,
                     "output_dir": DEFAULT_GPT4ALL_DIR,
                     "generate_config": False,
-                    "default_context_size": 4096,
-                    "default_gpu_layers": -1,
+                    "gpu_layers": -1,
                 },
                 "koboldcpp": {
                     "enabled": False,
                     "output_dir": DEFAULT_KOBOLDCPP_DIR,
                     "generate_kcpps": True,
-                    "default_context_size": 4096,
-                    "default_gpu_layers": -1,
+                    "gpu_layers": -1,
                 },
                 "vllm": {
                     "enabled": False,
@@ -412,7 +410,6 @@ class ConfigLoader:
                     "output_dir": DEFAULT_LLAMA_CPP_PYTHON_DIR,
                     "server_port": 8000,
                     "server_host": "0.0.0.0",
-                    "context_size": 4096,
                     "gpu_layers": -1,
                 },
             },
@@ -431,6 +428,7 @@ class ConfigLoader:
                 "prefer_hardlinks": True,
                 "add_only": False,
                 "preserve_orphans": False,
+                "default_context_size": None,
             },
         }
         return yaml.dump(default, default_flow_style=False, sort_keys=False)

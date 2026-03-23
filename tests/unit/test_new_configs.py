@@ -83,21 +83,21 @@ class TestGPT4AllConfig:
         config = GPT4AllConfig(output_dir=temp_dir / "models")
 
         assert config.generate_config is False
-        assert config.default_context_size == 4096
-        assert config.default_gpu_layers == -1
+        assert config.context_size is None
+        assert config.gpu_layers == -1
 
     def test_custom_values(self, temp_dir: Path) -> None:
         """Test custom configuration values."""
         config = GPT4AllConfig(
             output_dir=temp_dir / "models",
             generate_config=True,
-            default_context_size=8192,
-            default_gpu_layers=32,
+            context_size=8192,
+            gpu_layers=32,
         )
 
         assert config.generate_config is True
-        assert config.default_context_size == 8192
-        assert config.default_gpu_layers == 32
+        assert config.context_size == 8192
+        assert config.gpu_layers == 32
 
 
 class TestKoboldCppConfig:
@@ -108,8 +108,8 @@ class TestKoboldCppConfig:
         config = KoboldCppConfig(output_dir=temp_dir / "models")
 
         assert config.generate_kcpps is True
-        assert config.default_context_size == 4096
-        assert config.default_gpu_layers == -1
+        assert config.context_size is None
+        assert config.gpu_layers == -1
         assert config.default_threads == 5
 
     def test_custom_values(self, temp_dir: Path) -> None:
@@ -117,13 +117,13 @@ class TestKoboldCppConfig:
         config = KoboldCppConfig(
             output_dir=temp_dir / "models",
             generate_kcpps=True,
-            default_context_size=16384,
-            default_gpu_layers=64,
+            context_size=16384,
+            gpu_layers=64,
             default_threads=8,
         )
 
-        assert config.default_context_size == 16384
-        assert config.default_gpu_layers == 64
+        assert config.context_size == 16384
+        assert config.gpu_layers == 64
         assert config.default_threads == 8
 
 
