@@ -4,6 +4,11 @@ from .base import Backend, BackendResult, LinkResult
 from .llama_cpp import LlamaCppBackend
 from .localai import LocalAIBackend
 from .lmstudio import LMStudioBackend
+from .ollama import OllamaBackend
+from .textgen import TextGenBackend
+from .gpt4all import GPT4AllBackend
+from .koboldcpp import KoboldCppBackend
+from .vllm import vLLMBackend
 
 __all__ = [
     "Backend",
@@ -12,4 +17,9 @@ __all__ = [
     "LlamaCppBackend",
     "LocalAIBackend",
     "LMStudioBackend",
+    "OllamaBackend",
+    "TextGenBackend",
+    "GPT4AllBackend",
+    "KoboldCppBackend",
+    "vLLMBackend",
 ]

@@ -7,6 +7,11 @@ DEFAULT_MODELS_SRC = "/models"
 DEFAULT_MODELS_DST = "/llama_models"
 DEFAULT_LOCALAI_DIR = "/localai_models"
 DEFAULT_LMSTUDIO_DIR = "/lmstudio_models"
+DEFAULT_OLLAMA_DIR = "/ollama_models"
+DEFAULT_TEXTGEN_DIR = "/textgen_models"
+DEFAULT_GPT4ALL_DIR = "/gpt4all_models"
+DEFAULT_KOBOLDCPP_DIR = "/koboldcpp_models"
+DEFAULT_VLLM_DIR = "/vllm_models"
 
 # Service configuration
 DEFAULT_SERVICE_NAME = "link-models"
@@ -16,14 +21,16 @@ DEFAULT_VENV_DIR = "/opt/link-models/venv"
 DOWNLOAD_CHECK_INTERVAL = 2  # Seconds between size checks
 DOWNLOAD_STABLE_COUNT = 3  # Consecutive stable checks to confirm complete
 DOWNLOAD_MAX_WAIT = 3600  # Maximum seconds to wait for download
-PARTIAL_DOWNLOAD_EXTENSIONS = frozenset([
-    ".part",
-    ".tmp",
-    ".temp",
-    ".crdownload",
-    ".download",
-    "~",
-])
+PARTIAL_DOWNLOAD_EXTENSIONS = frozenset(
+    [
+        ".part",
+        ".tmp",
+        ".temp",
+        ".crdownload",
+        ".download",
+        "~",
+    ]
+)
 
 # Model file patterns
 GGUF_EXTENSION = ".gguf"

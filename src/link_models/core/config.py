@@ -14,6 +14,11 @@ from .constants import (
     DEFAULT_MODELS_DST,
     DEFAULT_LOCALAI_DIR,
     DEFAULT_LMSTUDIO_DIR,
+    DEFAULT_OLLAMA_DIR,
+    DEFAULT_TEXTGEN_DIR,
+    DEFAULT_GPT4ALL_DIR,
+    DEFAULT_KOBOLDCPP_DIR,
+    DEFAULT_VLLM_DIR,
 )
 from .exceptions import ConfigError
 from .logging import get_logger
@@ -23,6 +28,11 @@ from .models import (
     LlamaCppConfig,
     LocalAIConfig,
     LMStudioConfig,
+    OllamaConfig,
+    TextGenConfig,
+    GPT4AllConfig,
+    KoboldCppConfig,
+    vLLMConfig,
     WatchConfig,
     LoggingConfig,
     SyncConfig,
@@ -49,18 +59,18 @@ ENV_PREFIX = "LINK_MODELS_"
 
 def load_yaml_config(path: Path) -> dict[str, Any]:
     """Load configuration from YAML file.
-    
+
     Args:
         path: Path to YAML file
-        
+
     Returns:
         Configuration dictionary
-        
+
     Raises:
         ConfigError: If file cannot be loaded
     """
     try:
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     except FileNotFoundError:
         raise ConfigError(f"Configuration file not found: {path}")
@@ -72,31 +82,31 @@ def load_yaml_config(path: Path) -> dict[str, Any]:
 
 def get_env_config() -> dict[str, Any]:
     """Load configuration from environment variables.
-    
+
     Environment variables are expected to be prefixed with LINK_MODELS_
     and use double underscore as nested key separator.
-    
+
     Examples:
         LINK_MODELS_SOURCE_DIR=/models
         LINK_MODELS_BACKENDS__LLAMA_CPP__OUTPUT_DIR=/llama_models
         LINK_MODELS_WATCH__ENABLED=true
-    
+
     Returns:
         Configuration dictionary
     """
     config: dict[str, Any] = {}
-    
+
     for key, value in os.environ.items():
         if not key.startswith(ENV_PREFIX):
             continue
-        
+
         # Remove prefix and split by double underscore
-        config_key = key[len(ENV_PREFIX):].lower()
+        config_key = key[len(ENV_PREFIX) :].lower()
         keys = config_key.split("__")
-        
+
         # Parse value
         parsed_value = _parse_env_value(value)
-        
+
         # Build nested structure
         current = config
         for k in keys[:-1]:
@@ -104,75 +114,75 @@ def get_env_config() -> dict[str, Any]:
                 current[k] = {}
             current = current[k]
         current[keys[-1]] = parsed_value
-    
+
     return config
 
 
 def _parse_env_value(value: str) -> Any:
     """Parse environment variable value to appropriate type.
-    
+
     Args:
         value: String value from environment
-        
+
     Returns:
         Parsed value (bool, int, float, or string)
     """
     # Boolean values
     lower = value.lower()
-    if lower in ('true', 'yes', '1', 'on'):
+    if lower in ("true", "yes", "1", "on"):
         return True
-    if lower in ('false', 'no', '0', 'off'):
+    if lower in ("false", "no", "0", "off"):
         return False
-    
+
     # Integer
     try:
         return int(value)
     except ValueError:
         pass
-    
+
     # Float
     try:
         return float(value)
     except ValueError:
         pass
-    
+
     # Path expansion
-    if value.startswith('~/') or value.startswith('$HOME/'):
+    if value.startswith("~/") or value.startswith("$HOME/"):
         return os.path.expanduser(value)
-    if value.startswith('$'):
+    if value.startswith("$"):
         return os.path.expandvars(value)
-    
+
     # String
     return value
 
 
 def merge_configs(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """Deep merge two configuration dictionaries.
-    
+
     Args:
         base: Base configuration
         override: Configuration to merge on top
-        
+
     Returns:
         Merged configuration
     """
     result = dict(base)
-    
+
     for key, value in override.items():
         if key in result and isinstance(result[key], dict) and isinstance(value, dict):
             result[key] = merge_configs(result[key], value)
         else:
             result[key] = value
-    
+
     return result
 
 
 class ConfigLoader:
     """Loads and manages application configuration."""
-    
+
     def __init__(self) -> None:
         self._config: AppConfig | None = None
-    
+
     def load(
         self,
         *,
@@ -180,38 +190,38 @@ class ConfigLoader:
         cli_args: dict[str, Any] | None = None,
     ) -> AppConfig:
         """Load configuration from all sources.
-        
+
         Configuration is loaded in order of increasing precedence:
         1. Default values
         2. Config file
         3. Environment variables
         4. CLI arguments
-        
+
         Args:
             config_path: Explicit path to config file
             cli_args: CLI argument overrides
-            
+
         Returns:
             Validated AppConfig
-            
+
         Raises:
             ConfigError: If configuration is invalid
         """
         # Start with empty config
         raw_config: dict[str, Any] = {}
-        
+
         # 1. Load from config file if available
         file_config = self._find_and_load_config(config_path)
         if file_config:
             raw_config = merge_configs(raw_config, file_config)
             logger.debug("Loaded configuration from file", path=config_path)
-        
+
         # 2. Load from environment variables
         env_config = get_env_config()
         if env_config:
             raw_config = merge_configs(raw_config, env_config)
             logger.debug("Loaded configuration from environment")
-        
+
         # 3. Apply CLI arguments (highest precedence)
         if cli_args:
             # Filter out None values
@@ -219,7 +229,7 @@ class ConfigLoader:
             if cli_config:
                 raw_config = merge_configs(raw_config, cli_config)
                 logger.debug("Applied CLI arguments")
-        
+
         # 4. Parse and validate
         try:
             self._config = self._parse_config(raw_config)
@@ -228,25 +238,25 @@ class ConfigLoader:
                 "Configuration validation failed",
                 details={"errors": e.errors()},
             ) from e
-        
+
         logger.info(
             "Configuration loaded",
             source_dir=str(self._config.source_dir),
             backends=list(self._config.backends.keys()),
             watch_enabled=self._config.watch.enabled,
         )
-        
+
         return self._config
-    
+
     def _find_and_load_config(
         self,
         explicit_path: Path | None = None,
     ) -> dict[str, Any] | None:
         """Find and load config file.
-        
+
         Args:
             explicit_path: Explicit path to config file
-            
+
         Returns:
             Configuration dictionary or None
         """
@@ -254,58 +264,68 @@ class ConfigLoader:
             if explicit_path.exists():
                 return load_yaml_config(explicit_path)
             raise ConfigError(f"Config file not found: {explicit_path}")
-        
+
         # Search in default locations
         for path in CONFIG_LOCATIONS:
             if path.exists():
                 logger.debug("Found config file", path=str(path))
                 return load_yaml_config(path)
-        
+
         logger.debug("No config file found in default locations")
         return None
-    
+
     def _parse_config(self, raw: dict[str, Any]) -> AppConfig:
         """Parse raw configuration into AppConfig.
-        
+
         Args:
             raw: Raw configuration dictionary
-            
+
         Returns:
             Validated AppConfig
         """
         # Handle backends specially to instantiate correct types
         backends: dict[str, BackendConfig] = {}
-        raw_backends = raw.pop('backends', {})
-        
+        raw_backends = raw.pop("backends", {})
+
         for name, config in raw_backends.items():
-            backend_type = config.get('type', name).lower()
-            
-            if backend_type in ('llama_cpp', 'llama-cpp', 'llamacpp'):
+            backend_type = config.get("type", name).lower()
+
+            if backend_type in ("llama_cpp", "llama-cpp", "llamacpp"):
                 backends[name] = LlamaCppConfig(**config)
-            elif backend_type == 'localai':
+            elif backend_type == "localai":
                 backends[name] = LocalAIConfig(**config)
-            elif backend_type == 'lmstudio':
+            elif backend_type == "lmstudio":
                 backends[name] = LMStudioConfig(**config)
+            elif backend_type == "ollama":
+                backends[name] = OllamaConfig(**config)
+            elif backend_type in ("textgen", "text-generation-webui", "oobabooga"):
+                backends[name] = TextGenConfig(**config)
+            elif backend_type == "gpt4all":
+                backends[name] = GPT4AllConfig(**config)
+            elif backend_type == "koboldcpp":
+                backends[name] = KoboldCppConfig(**config)
+            elif backend_type == "vllm":
+                backends[name] = vLLMConfig(**config)
             else:
                 backends[name] = BackendConfig(**config)
-        
+
         # Add default backends if not specified
         if not backends:
-            backends['llama_cpp'] = LlamaCppConfig(
+            backends["llama_cpp"] = LlamaCppConfig(
                 output_dir=Path(DEFAULT_MODELS_DST),
             )
-            backends['localai'] = LocalAIConfig(
+            backends["localai"] = LocalAIConfig(
                 output_dir=Path(DEFAULT_LOCALAI_DIR),
             )
-        
+
         # Parse nested config objects
-        watch_config = WatchConfig(**raw.pop('watch', {}))
-        logging_config = LoggingConfig(**raw.pop('logging', {}))
-        sync_config = SyncConfig(**raw.pop('sync', {}))
-        
+        watch_config = WatchConfig(**raw.pop("watch", {}))
+        logging_config = LoggingConfig(**raw.pop("logging", {}))
+        sync_config = SyncConfig(**raw.pop("sync", {}))
+
         # Source directory
-        source_dir = raw.pop('source_dir', Path(DEFAULT_MODELS_SRC))
-        
+        source_dir = raw.pop("source_dir", Path(DEFAULT_MODELS_SRC))
+
         return AppConfig(
             source_dir=Path(source_dir),
             backends=backends,
@@ -314,49 +334,82 @@ class ConfigLoader:
             sync=sync_config,
             **raw,  # Any additional config
         )
-    
+
     @property
     def config(self) -> AppConfig | None:
         """Get loaded configuration."""
         return self._config
-    
+
     def generate_default_config(self) -> str:
         """Generate default configuration as YAML string.
-        
+
         Returns:
             YAML configuration string
         """
         default = {
-            'source_dir': DEFAULT_MODELS_SRC,
-            'backends': {
-                'llama_cpp': {
-                    'enabled': True,
-                    'output_dir': DEFAULT_MODELS_DST,
-                    'generate_models_ini': True,
-                    'use_subdirs': True,
+            "source_dir": DEFAULT_MODELS_SRC,
+            "backends": {
+                "llama_cpp": {
+                    "enabled": True,
+                    "output_dir": DEFAULT_MODELS_DST,
+                    "generate_models_ini": True,
+                    "use_subdirs": True,
                 },
-                'localai': {
-                    'enabled': True,
-                    'output_dir': DEFAULT_LOCALAI_DIR,
-                    'generate_yaml': True,
-                    'gpu_layers': -1,
-                    'mmap': True,
-                    'f16': True,
+                "localai": {
+                    "enabled": True,
+                    "output_dir": DEFAULT_LOCALAI_DIR,
+                    "generate_yaml": True,
+                    "gpu_layers": -1,
+                    "mmap": True,
+                    "f16": True,
+                },
+                "ollama": {
+                    "enabled": False,
+                    "output_dir": DEFAULT_OLLAMA_DIR,
+                    "generate_modelfile": True,
+                },
+                "textgen": {
+                    "enabled": False,
+                    "output_dir": DEFAULT_TEXTGEN_DIR,
+                    "generate_settings_yaml": False,
+                    "generate_model_configs": False,
+                },
+                "gpt4all": {
+                    "enabled": False,
+                    "output_dir": DEFAULT_GPT4ALL_DIR,
+                    "generate_config": False,
+                    "default_context_size": 4096,
+                    "default_gpu_layers": -1,
+                },
+                "koboldcpp": {
+                    "enabled": False,
+                    "output_dir": DEFAULT_KOBOLDCPP_DIR,
+                    "generate_kcpps": True,
+                    "default_context_size": 4096,
+                    "default_gpu_layers": -1,
+                },
+                "vllm": {
+                    "enabled": False,
+                    "output_dir": DEFAULT_VLLM_DIR,
+                    "generate_config": True,
+                    "trust_remote_code": True,
                 },
             },
-            'watch': {
-                'enabled': False,
-                'check_interval': 2.0,
-                'stable_count': 3,
-                'max_wait_time': 3600,
+            "watch": {
+                "enabled": False,
+                "check_interval": 2.0,
+                "stable_count": 3,
+                "max_wait_time": 3600,
             },
-            'logging': {
-                'level': 'INFO',
-                'json_format': False,
+            "logging": {
+                "level": "INFO",
+                "json_format": False,
             },
-            'sync': {
-                'dry_run': False,
-                'prefer_hardlinks': True,
+            "sync": {
+                "dry_run": False,
+                "prefer_hardlinks": True,
+                "add_only": False,
+                "preserve_orphans": False,
             },
         }
         return yaml.dump(default, default_flow_style=False, sort_keys=False)
