@@ -61,7 +61,8 @@ class vLLMBackend(Backend):
             group: Model group to sync
             source_dir: Source directory (ground truth)
             context_size: Optional context size override
-
+            gpu_layers: Optional GPU layers override
+            threads: Optional threads override
         Returns:
             BackendResult with operation results
         """
@@ -165,9 +166,19 @@ class vLLMBackend(Backend):
             return
 
         metadata = primary.metadata or GGUFMetadata()
+        config_path = model_subdir / "config.json"
 
-        # Build config (vLLM uses HuggingFace-style config.json)
-        config = {
+        # Load existing config to preserve user settings
+        existing = self._load_existing_config(config_path, "json")
+        self.logger.debug(
+            "vLLM config resolution",
+            model=model_id,
+            existing=existing is not None,
+            metadata_context_length=metadata.context_length,
+        )
+
+        # Build default config (vLLM uses HuggingFace-style config.json)
+        defaults = {
             "model_type": metadata.architecture or "llama",
             "torch_dtype": "float16",
             "trust_remote_code": self.vllm_config.trust_remote_code,
@@ -175,19 +186,28 @@ class vLLMBackend(Backend):
 
         # Add context length if known
         if metadata.context_length:
-            config["max_model_len"] = metadata.context_length
+            defaults["max_model_len"] = metadata.context_length
 
         # Add quantization if known
         if metadata.quantization:
-            config["quantization"] = f"gguf_{metadata.quantization}"
+            defaults["quantization"] = f"gguf_{metadata.quantization}"
 
         # For vision models
-        if group.has_vision and group.mmproj_file:
-            config["mm_processor_kwargs"] = {
+        if group.has_vision and group.mmproj_file and not existing:
+            defaults["mm_processor_kwargs"] = {
                 "mm_model": f"./{group.mmproj_file.name}",
             }
 
-        config_path = model_subdir / "config.json"
+        # Merge with existing, preserving user values
+        protected = {
+            "model_type",
+            "torch_dtype",
+            "trust_remote_code",
+            "max_model_len",
+            "quantization",
+            "mm_processor_kwargs",
+        }
+        config = self._merge_config(existing, defaults, protected)
 
         import json
 

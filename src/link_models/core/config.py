@@ -429,6 +429,8 @@ class ConfigLoader:
                 "add_only": False,
                 "preserve_orphans": False,
                 "default_context_size": None,
+                "default_gpu_layers": -1,
+                "default_threads": None,
             },
         }
         return yaml.dump(default, default_flow_style=False, sort_keys=False)

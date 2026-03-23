@@ -16,64 +16,66 @@ logger = get_logger(__name__)
 
 class LMStudioBackend(Backend):
     """Backend for LM Studio model organization.
-    
+
     LM Studio uses a specific directory structure and manifest files
     to organize models for its UI.
     """
-    
+
     def __init__(self, config: LMStudioConfig) -> None:
         """Initialize LM Studio backend.
-        
+
         Args:
             config: LM Studio configuration
         """
         super().__init__(config)
         self.lmstudio_config = config
-    
+
     @property
     def name(self) -> str:
         """Return backend name."""
         return "LM Studio"
-    
+
     def setup(self) -> None:
         """Setup LM Studio backend directories."""
         super().setup()
-        
+
         if not self.config.enabled:
             return
-        
+
         self.models_dir = self.output_dir
         self._ensure_dir(self.models_dir)
-        
+
         # LM Studio might use a manifest directory
         self.manifest_dir = self.models_dir / ".manifests"
         self._ensure_dir(self.manifest_dir)
-    
-    def sync_group(self, group: ModelGroup, source_dir: Path, context_size: int | None = None) -> BackendResult:
+
+    def sync_group(
+        self, group: ModelGroup, source_dir: Path, context_size: int | None = None
+    ) -> BackendResult:
         """Sync a model group to LM Studio backend.
-        
+
         LM Studio organizes models in a flat structure with metadata
         stored in sidecar files or a manifest.
-        
+
         Args:
             group: Model group to sync
             context_size: Optional context size override
             source_dir: Source directory (ground truth)
-            
+
         Returns:
             BackendResult with operation results
         """
         if not self.config.enabled:
             return BackendResult(success=True, skipped=1)
-        
+
         result = BackendResult(success=True)
         model_id = group.model_id
-        
+
         # LM Studio typically uses a flat structure but with subdirs for organization
         # We'll create a subdirectory per model like other backends
         model_subdir = self.models_dir / model_id
         self._ensure_dir(model_subdir)
-        
+
         # Link all model files
         for model_file in group.files:
             # Source must be in source_dir
@@ -98,14 +100,14 @@ class LMStudioBackend(Backend):
                     )
                     result.skipped += 1
                     continue
-            
+
             target = model_subdir / model_file.name
             link_result = self._create_link(
                 model_file.path,
                 target,
                 prefer_hardlink=self.config.prefer_hardlinks,
             )
-            
+
             if link_result.success:
                 if link_result.action == SyncAction.CREATE:
                     result.linked += 1
@@ -115,7 +117,7 @@ class LMStudioBackend(Backend):
                     result.updated += 1
             else:
                 result.errors.append(link_result.error or "Unknown error")
-        
+
         # Link mmproj if present
         if group.mmproj_file:
             mmproj_target = model_subdir / group.mmproj_file.name
@@ -124,28 +126,28 @@ class LMStudioBackend(Backend):
                 mmproj_target,
                 prefer_hardlink=self.config.prefer_hardlinks,
             )
-            
+
             if link_result.success:
                 if link_result.action == SyncAction.CREATE:
                     result.linked += 1
-        
+
         # Generate metadata file if enabled
         if self.lmstudio_config.generate_manifest:
             self._generate_manifest(group)
-        
+
         return result
-    
+
     def remove_group(self, model_id: str) -> BackendResult:
         """Remove a model group from LM Studio backend.
-        
+
         Args:
             model_id: Normalized model ID to remove
-            
+
         Returns:
             BackendResult with operation results
         """
         result = BackendResult(success=True)
-        
+
         # Remove model directory
         model_subdir = self.models_dir / model_id
         if model_subdir.exists():
@@ -153,44 +155,53 @@ class LMStudioBackend(Backend):
                 result.removed += 1
             else:
                 result.errors.append(f"Failed to remove {model_subdir}")
-        
+
         # Remove manifest file
         manifest_path = self._get_manifest_path(model_id)
         if manifest_path.exists():
             if self._remove_path(manifest_path):
                 result.removed += 1
-        
+
         return result
-    
+
     def _get_manifest_path(self, model_id: str) -> Path:
         """Get the path for a model's manifest file."""
         return self.manifest_dir / f"{model_id}.json"
-    
+
     def _generate_manifest(self, group: ModelGroup) -> None:
         """Generate LM Studio manifest for a model group.
-        
+
         Args:
             group: Model group
         """
         model_id = group.model_id
         primary = group.primary_file
-        
+
         if not primary:
             logger.warning("No primary file for group", model_id=model_id)
             return
-        
-        # Get metadata
+
         metadata = primary.metadata or GGUFMetadata()
-        
-        # Build manifest
-        manifest = {
+        manifest_path = self._get_manifest_path(model_id)
+
+        # Load existing manifest to preserve user settings
+        existing = self._load_existing_config(manifest_path, "json")
+        self.logger.debug(
+            "LM Studio config resolution",
+            model=model_id,
+            existing=existing is not None,
+            metadata_context_length=metadata.context_length,
+        )
+
+        # Build default manifest
+        defaults = {
             "id": model_id,
             "name": metadata.name or model_id,
             "architecture": metadata.architecture,
             "files": [
                 {
                     "name": f.name,
-                    "size": f.file_size if hasattr(f, 'file_size') else f.path.stat().st_size,
+                    "size": f.file_size if hasattr(f, "file_size") else f.path.stat().st_size,
                 }
                 for f in group.get_all_files()
             ],
@@ -203,49 +214,53 @@ class LMStudioBackend(Backend):
             "has_vision": group.has_vision,
             "modified_at": datetime.now().isoformat(),
         }
-        
+
+        # Merge with existing, preserving user values
+        protected = {"id", "name", "files", "parameters"}
+        manifest = self._merge_config(existing, defaults, protected)
+
         manifest_path = self._get_manifest_path(model_id)
-        
+
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2)
-        
+
         self._set_permissions(manifest_path)
         logger.debug("Generated LM Studio manifest", path=str(manifest_path))
-    
+
     def cleanup_orphans(self, valid_model_ids: set[str]) -> BackendResult:
         """Remove orphaned model directories and manifests not in valid set.
-        
+
         Args:
             valid_model_ids: Set of valid model IDs
-            
+
         Returns:
             BackendResult with cleanup results
         """
         result = BackendResult(success=True)
-        
+
         if not self.models_dir.exists():
             return result
-        
+
         # Cleanup model directories
         for item in self.models_dir.iterdir():
             if item.name.startswith("."):
                 continue  # Skip hidden directories like .manifests
-            
+
             if item.is_dir() and item.name not in valid_model_ids:
                 if self._remove_path(item):
                     result.removed += 1
                 else:
                     result.errors.append(f"Failed to remove orphan: {item}")
-        
+
         # Cleanup orphaned manifest files
         if self.manifest_dir.exists():
             for manifest_file in self.manifest_dir.glob("*.json"):
                 model_id = manifest_file.stem
-                
+
                 if model_id not in valid_model_ids:
                     if self._remove_path(manifest_file):
                         result.removed += 1
                     else:
                         result.errors.append(f"Failed to remove orphan manifest: {manifest_file}")
-        
+
         return result

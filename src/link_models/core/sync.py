@@ -161,6 +161,42 @@ class SyncEngine:
         # None means "use backend default"
         return None
 
+    def _get_gpu_layers(self, backend: Backend) -> int:
+        """Get GPU layers for a backend, respecting config overrides.
+
+        Priority: backend.config.gpu_layers (if has it) > sync.default_gpu_layers
+
+        Args:
+            backend: Backend to get gpu_layers for
+
+        Returns:
+            GPU layers to use
+        """
+        # Check backend-specific override
+        if hasattr(backend.config, "gpu_layers") and backend.config.gpu_layers is not None:
+            return backend.config.gpu_layers
+
+        # Check global default
+        return self.config.sync.default_gpu_layers
+
+    def _get_threads(self, backend: Backend) -> int | None:
+        """Get threads for a backend, respecting config overrides.
+
+        Priority: backend.config.threads (if has it) > sync.default_threads
+
+        Args:
+            backend: Backend to get threads for
+
+        Returns:
+            Threads to use, or None to let backend decide
+        """
+        # Check backend-specific override
+        if hasattr(backend.config, "threads") and backend.config.threads is not None:
+            return backend.config.threads
+
+        # Check global default
+        return self.config.sync.default_threads
+
     def _should_skip_backend(self, backend: Backend, model_id: str) -> bool:
         """Check if a model should be skipped for a specific backend.
 
@@ -504,8 +540,12 @@ class SyncEngine:
             # Get effective context size for this backend/model
             metadata = group.primary_file.metadata if group.primary_file else None
             context_size = self._get_context_size(backend, metadata)
+            gpu_layers = self._get_gpu_layers(backend)
+            threads = self._get_threads(backend)
 
-            group_result = backend.sync_group(group, self.source_dir, context_size)
+            group_result = backend.sync_group(
+                group, self.source_dir, context_size, gpu_layers, threads
+            )
             result.linked += group_result.linked
             result.updated += group_result.updated
             result.skipped += group_result.skipped
@@ -587,7 +627,11 @@ class SyncEngine:
                         for backend in self.backends:
                             metadata = group.primary_file.metadata if group.primary_file else None
                             context_size = self._get_context_size(backend, metadata)
-                            result = backend.sync_group(group, self.source_dir, context_size)
+                            gpu_layers = self._get_gpu_layers(backend)
+                            threads = self._get_threads(backend)
+                            result = backend.sync_group(
+                                group, self.source_dir, context_size, gpu_layers, threads
+                            )
                             results[backend.name] = result
                         break
             else:
@@ -644,7 +688,11 @@ class SyncEngine:
                 for backend in self.backends:
                     metadata = group.primary_file.metadata if group.primary_file else None
                     context_size = self._get_context_size(backend, metadata)
-                    result = backend.sync_group(group, self.source_dir, context_size)
+                    gpu_layers = self._get_gpu_layers(backend)
+                    threads = self._get_threads(backend)
+                    result = backend.sync_group(
+                        group, self.source_dir, context_size, gpu_layers, threads
+                    )
                     results[backend.name] = result
                 break
 

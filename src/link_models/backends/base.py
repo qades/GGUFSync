@@ -67,6 +67,8 @@ class Backend(ABC):
         group: ModelGroup,
         source_dir: Path,
         context_size: int | None = None,
+        gpu_layers: int | None = None,
+        threads: int | None = None,
     ) -> BackendResult:
         """Sync a model group to this backend.
 
@@ -74,6 +76,8 @@ class Backend(ABC):
             group: Model group to sync
             source_dir: Source directory (ground truth)
             context_size: Optional context size override
+            gpu_layers: Optional GPU layers override
+            threads: Optional threads override
 
         Returns:
             BackendResult with operation results
@@ -401,6 +405,68 @@ class Backend(ABC):
 
         if not models_dir.exists():
             return result
+
+    def _load_existing_config(self, path: Path, format: str = "json") -> dict | None:
+        """Load existing config file if it exists.
+
+        Args:
+            path: Path to config file
+            format: "json" or "yaml"
+
+        Returns:
+            Existing config dict, or None if doesn't exist
+        """
+        if not path.exists():
+            return None
+
+        try:
+            if format == "json":
+                import json
+
+                with open(path, "r") as f:
+                    return json.load(f)
+            elif format == "yaml":
+                import yaml
+
+                with open(path, "r") as f:
+                    return yaml.safe_load(f)
+        except Exception as e:
+            self.logger.warning("Failed to load existing config", path=str(path), error=str(e))
+            return None
+
+    def _merge_config(
+        self,
+        existing: dict | None,
+        defaults: dict,
+        protected_keys: set[str] | None = None,
+    ) -> dict:
+        """Merge existing config with defaults, protecting user-set values.
+
+        Args:
+            existing: Existing config (may be None)
+            defaults: Default values to apply
+            protected_keys: Keys that should NOT be overwritten from defaults
+
+        Returns:
+            Merged config dict
+        """
+        protected_keys = protected_keys or set()
+
+        if existing is None:
+            return defaults.copy()
+
+        # Start with defaults, then overlay existing values
+        result = defaults.copy()
+
+        for key, value in existing.items():
+            # Protected keys keep their existing value
+            if key in protected_keys and value is not None:
+                continue
+            # None values in existing are treated as "not set", use default
+            if value is not None:
+                result[key] = value
+
+        return result
 
         for item in models_dir.iterdir():
             if item.name in skip_dirs or not item.is_dir():

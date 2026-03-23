@@ -58,7 +58,8 @@ class KoboldCppBackend(Backend):
             group: Model group to sync
             source_dir: Source directory (ground truth)
             context_size: Optional context size override
-
+            gpu_layers: Optional GPU layers override
+            threads: Optional threads override
         Returns:
             BackendResult with operation results
         """
@@ -166,14 +167,27 @@ class KoboldCppBackend(Backend):
             return
 
         metadata = primary.metadata or GGUFMetadata()
+        kcpps_path = self.models_dir / f"{model_id}.kcpps"
+
+        # Load existing config to preserve user settings
+        existing = self._load_existing_config(kcpps_path, "json")
+        self.logger.debug(
+            "KoboldCpp config resolution",
+            model=model_id,
+            existing=existing is not None,
+            context_size=context_size,
+            config_context_size=self.config.context_size,
+            metadata_context_length=metadata.context_length,
+            gpu_layers=self.config.gpu_layers,
+        )
 
         # Get context size: param > config > metadata > -1 (unlimited)
         effective_context_size = (
             context_size or self.config.context_size or metadata.context_length or -1
         )
 
-        # Build .kcpps config (KoboldCpp uses JSON-like format saved as .kcpps)
-        config = {
+        # Build default config (KoboldCpp uses JSON-like format saved as .kcpps)
+        defaults = {
             "model_param": f"./{primary.name}",
             "contextsize": effective_context_size,
             "gpulayers": self.config.gpu_layers,
@@ -182,15 +196,24 @@ class KoboldCppBackend(Backend):
             "use_flash_attention": True,
         }
 
-        # Add mmproj if present
         if group.mmproj_file:
-            config["mmproj_param"] = f"./{group.mmproj_file.name}"
+            defaults["mmproj_param"] = f"./{group.mmproj_file.name}"
 
-        # Add stopwords if available
-        if metadata.stop_tokens:
-            config["stop"] = metadata.stop_tokens
+        if metadata.stop_tokens and not existing:
+            defaults["stop"] = metadata.stop_tokens
 
-        kcpps_path = self.models_dir / f"{model_id}.kcpps"
+        # Merge with existing, preserving user values
+        protected = {
+            "model_param",
+            "contextsize",
+            "gpulayers",
+            "threads",
+            "use_mmap",
+            "use_flash_attention",
+            "mmproj_param",
+            "stop",
+        }
+        config = self._merge_config(existing, defaults, protected)
 
         with open(kcpps_path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)

@@ -54,6 +54,8 @@ class GPT4AllBackend(Backend):
         group: ModelGroup,
         source_dir: Path,
         context_size: int | None = None,
+        gpu_layers: int | None = None,
+        threads: int | None = None,
     ) -> BackendResult:
         """Sync a model group to GPT4All backend.
 
@@ -63,6 +65,8 @@ class GPT4AllBackend(Backend):
             group: Model group to sync
             source_dir: Source directory (ground truth)
             context_size: Optional context size override
+            gpu_layers: Optional GPU layers override
+            threads: Optional threads override
 
         Returns:
             BackendResult with operation results
@@ -167,14 +171,26 @@ class GPT4AllBackend(Backend):
             return
 
         metadata = primary.metadata or GGUFMetadata()
+        config_path = self.configs_dir / f"{model_id}.json"
+
+        # Load existing config to preserve user settings
+        existing = self._load_existing_config(config_path, "json")
+        self.logger.debug(
+            "GPT4All config resolution",
+            model=model_id,
+            existing=existing is not None,
+            context_size=context_size,
+            config_context_size=self.config.context_size,
+            metadata_context_length=metadata.context_length,
+        )
 
         # Get context size: param > config > metadata > -1 (unlimited)
         effective_context_size = (
             context_size or self.config.context_size or metadata.context_length or -1
         )
 
-        # Build config - GPT4All uses a specific JSON format
-        config = {
+        # Build default config - GPT4All uses a specific JSON format
+        defaults = {
             "model": f"{model_id}/{primary.name}",
             "model_name": group.display_name,
             "model_path": str(primary.path),
@@ -192,10 +208,14 @@ class GPT4AllBackend(Backend):
             },
         }
 
-        if group.has_vision and group.mmproj_file:
-            config["mmproj"] = f"{model_id}/{group.mmproj_file.name}"
+        # Protect certain keys from being overwritten
+        protected = {"parameters", "llm", "chat_template"}
 
-        # Add chat template if available
+        if group.has_vision and group.mmproj_file and not existing:
+            defaults["mmproj"] = f"{model_id}/{group.mmproj_file.name}"
+
+        # Merge with existing, preserving user values
+        config = self._merge_config(existing, defaults, protected)
         if metadata.chat_template:
             config["chat_template"] = metadata.chat_template
 

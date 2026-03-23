@@ -553,6 +553,8 @@ class SyncConfig(BaseModel):
     add_only: bool = False  # If True, never delete from backends, only add
     global_ignore_file: Path | None = Field(default=None)
     default_context_size: int | None = None  # None = use model/frontend default
+    default_gpu_layers: int = -1  # -1 = use all available
+    default_threads: int | None = None  # None = let backend decide
 
     @field_validator("global_ignore_file")
     @classmethod

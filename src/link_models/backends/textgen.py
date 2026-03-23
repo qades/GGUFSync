@@ -64,7 +64,8 @@ class TextGenBackend(Backend):
             group: Model group to sync
             source_dir: Source directory (ground truth)
             context_size: Optional context size override
-
+            gpu_layers: Optional GPU layers override
+            threads: Optional threads override
         Returns:
             BackendResult with operation results
         """
@@ -179,14 +180,25 @@ class TextGenBackend(Backend):
             return
 
         metadata = primary.metadata or GGUFMetadata()
+        config_path = self.configs_dir / f"{model_id}.yaml"
+
+        # Load existing config to preserve user settings
+        existing = self._load_existing_config(config_path, "yaml")
+        self.logger.debug(
+            "TextGen config resolution",
+            model=model_id,
+            existing=existing is not None,
+            context_size=context_size,
+            config_context_size=self.config.context_size,
+        )
 
         # Get context size: param > config > metadata > -1 (unlimited)
         effective_context_size = (
             context_size or self.config.context_size or metadata.context_length or -1
         )
 
-        # Build config
-        config = {
+        # Build default config
+        defaults = {
             "model_name": group.display_name,
             "model_path": str(primary.path),
             "llm_loader": "llama.cpp",
@@ -198,10 +210,12 @@ class TextGenBackend(Backend):
             },
         }
 
-        if group.has_vision:
-            config["mmproj"] = str(group.mmproj_file.path) if group.mmproj_file else None
+        if group.has_vision and not existing:
+            defaults["mmproj"] = str(group.mmproj_file.path) if group.mmproj_file else None
 
-        config_path = self.configs_dir / f"{model_id}.yaml"
+        # Merge with existing, preserving user values
+        protected = {"model_name", "model_path", "llm_loader", "settings", "mmproj"}
+        config = self._merge_config(existing, defaults, protected)
 
         with open(config_path, "w", encoding="utf-8") as f:
             yaml.dump(config, f, default_flow_style=False, sort_keys=False)

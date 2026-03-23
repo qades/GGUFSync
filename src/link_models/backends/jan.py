@@ -36,7 +36,9 @@ class JanBackend(Backend):
         self.models_dir = self.output_dir / "models"
         self._ensure_dir(self.models_dir)
 
-    def sync_group(self, group: ModelGroup, source_dir: Path, context_size: int | None = None) -> BackendResult:
+    def sync_group(
+        self, group: ModelGroup, source_dir: Path, context_size: int | None = None
+    ) -> BackendResult:
         if not self.config.enabled:
             return BackendResult(success=True, skipped=1)
 
@@ -71,8 +73,19 @@ class JanBackend(Backend):
             return
 
         metadata = primary.metadata or GGUFMetadata()
+        config_path = model_dir / "model.json"
 
-        config = {
+        # Load existing config to preserve user settings
+        existing = self._load_existing_config(config_path, "json")
+        self.logger.debug(
+            "Jan config resolution",
+            model=model_id,
+            existing=existing is not None,
+            metadata_context_length=metadata.context_length,
+        )
+
+        # Build default config
+        defaults = {
             "id": model_id,
             "object": "model",
             "created": 0,
@@ -86,7 +99,9 @@ class JanBackend(Backend):
             },
         }
 
-        config_path = model_dir / "model.json"
+        # Merge with existing, preserving user values
+        protected = {"id", "object", "filename", "size", "metadata"}
+        config = self._merge_config(existing, defaults, protected)
 
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)

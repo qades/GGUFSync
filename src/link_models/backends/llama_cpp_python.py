@@ -35,7 +35,26 @@ class LlamaCppPythonBackend(Backend):
         self.models_dir = self.output_dir
         self._ensure_dir(self.models_dir)
 
-    def sync_group(self, group: ModelGroup, source_dir: Path, context_size: int | None = None) -> BackendResult:
+    def sync_group(
+        self,
+        group: ModelGroup,
+        source_dir: Path,
+        context_size: int | None = None,
+        gpu_layers: int | None = None,
+        threads: int | None = None,
+    ) -> BackendResult:
+        """Sync a model group to llama-cpp-python backend.
+
+        Args:
+            group: Model group to sync
+            source_dir: Source directory (ground truth)
+            context_size: Optional context size override
+            gpu_layers: Optional GPU layers override
+            threads: Optional threads override
+
+        Returns:
+            BackendResult with operation results
+        """
         if not self.config.enabled:
             return BackendResult(success=True, skipped=1)
 
