@@ -14,6 +14,28 @@ if TYPE_CHECKING:
 # Console for rich output
 _console = Console(stderr=True)
 
+# Global verbose state
+_verbose_enabled = False
+
+
+def set_verbose(enabled: bool) -> None:
+    """Set the global verbose state.
+    
+    Args:
+        enabled: Whether verbose mode is enabled
+    """
+    global _verbose_enabled
+    _verbose_enabled = enabled
+
+
+def is_verbose() -> bool:
+    """Check if verbose mode is enabled.
+    
+    Returns:
+        True if verbose mode is enabled
+    """
+    return _verbose_enabled
+
 
 def setup_logging(
     verbose: bool = False,
@@ -27,6 +49,9 @@ def setup_logging(
         json_format: Output logs as JSON (for production/systemd)
         log_file: Optional file to write logs to
     """
+    # Store verbose state globally
+    set_verbose(verbose)
+    
     # Install rich traceback handler for better error display
     install_rich_traceback(console=_console, show_locals=verbose)
 

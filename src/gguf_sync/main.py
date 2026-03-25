@@ -34,7 +34,7 @@ from .core.constants import (
 )
 from .core.discovery import BackendDiscovery, create_config_from_discovered
 from .core.exceptions import GGUFSyncError
-from .core.logging import get_logger, setup_logging
+from .core.logging import get_logger, is_verbose, setup_logging
 from .core.models import (
     AppConfig,
     GPT4AllConfig,
@@ -308,7 +308,7 @@ def sync(
                     console.print(f"  [blue]{count}[/blue] {reason_type}")
 
                 # Show details in verbose mode
-                if verbose and result.skip_reasons:
+                if is_verbose() and result.skip_reasons:
                     console.print("  [dim]Details:[/dim]")
                     for reason in result.skip_reasons[:20]:  # Limit to first 20
                         item = reason.get("item", "unknown")
